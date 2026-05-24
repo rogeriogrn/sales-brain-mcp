@@ -2,12 +2,15 @@ import { FastifyInstance } from "fastify";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { mcpServer } from "../../services/mcp-core.js";
 import { logger } from "../../shared/logger/index.js";
+import { authenticateApiKey } from "../middleware/auth.js";
 
 export async function mcpRoutes(fastify: FastifyInstance) {
   let transport: SSEServerTransport | null = null;
 
   // 1. Canal de Stream de Eventos (SSE) do MCP
-  fastify.get('/v1/mcp/sse', async (request, reply) => {
+  fastify.get('/v1/mcp/sse', {
+    onRequest: [authenticateApiKey],
+  }, async (request, reply) => {
     logger.info('🔌 Cliente estabelecendo conexão SSE do MCP');
 
     // SSEServerTransport espera o path onde as mensagens POST devem ser enviadas e a resposta http crua
@@ -26,7 +29,9 @@ export async function mcpRoutes(fastify: FastifyInstance) {
   });
 
   // 2. Canal de recebimento de comandos do cliente (JSON-RPC via POST)
-  fastify.post('/v1/mcp/messages', async (request, reply) => {
+  fastify.post('/v1/mcp/messages', {
+    onRequest: [authenticateApiKey],
+  }, async (request, reply) => {
     if (!transport) {
       logger.warn('⚠️ Requisição POST de mensagens recebida sem sessão SSE ativa');
       return reply.status(400).send({ 

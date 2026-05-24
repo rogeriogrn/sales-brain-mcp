@@ -180,10 +180,6 @@ ${context.profile_facts.length > 0
           {
             type: "text",
             text: markdownSummary
-          },
-          {
-            type: "text",
-            text: JSON.stringify(context, null, 2) // Retorna também em formato JSON estruturado
           }
         ]
       };
