@@ -14,6 +14,8 @@ import { strategyRoutes } from './routes/strategy.js';
 import { mcpRoutes } from './routes/mcp.js';
 import { replyRoutes } from './routes/reply.js';
 import { leadRoutes } from './routes/leads.js';
+import { adminRoutes } from './routes/admin.js';
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -62,6 +64,10 @@ async function main() {
 
     // Registrar Rotas de Leads
     await fastify.register(leadRoutes);
+
+    // Registrar Rotas Administrativas
+    await fastify.register(adminRoutes);
+
 
     // Iniciar o Servidor Fastify
     const address = await fastify.listen({

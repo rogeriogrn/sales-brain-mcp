@@ -1,52 +1,144 @@
-// Estado Global da Aplicação Frontend
+// Estado Global da Central de Inteligência
+let allLeads = []; // Cache local de leads para busca rápida
 let activeLeadId = null;
 let activeLeadExternalId = null;
 let activeLeadName = null;
 let activeTab = 'hot';
 let currentLeadMemories = { hot: [], profile: [], audit: [] };
 
-// Eixos comportamentais a serem renderizados da Persona
+// Atributos RPG Comportamentais (Definição de Eixos da Persona)
 const personaEixesDefinition = [
-  { key: 'directness', label: 'Diretividade / Objetividade', group: 'communication' },
-  { key: 'verbosity', label: 'Verbosidade / Tamanho de Fala', group: 'communication' },
-  { key: 'analytical', label: 'Perfil Analítico / Racional', group: 'communication' },
-  { key: 'emotionality', label: 'Emocionalidade / Impulsividade', group: 'communication' },
-  { key: 'price_sensitivity', label: 'Sensibilidade a Preço', group: 'decision' },
-  { key: 'trust_gap', label: 'Fenda de Desconfiança', group: 'decision' },
-  { key: 'urgency', label: 'Senso de Urgência', group: 'decision' },
-  { key: 'decision_speed', label: 'Velocidade de Decisão', group: 'decision' }
+  { key: 'directness', label: '🛡️ Diretividade (Foco/Ataque)', group: 'communication', color: 'bg-emerald-500' },
+  { key: 'verbosity', label: '💬 Verbosidade (Fôlego)', group: 'communication', color: 'bg-sky-400' },
+  { key: 'analytical', label: '🧠 Perfil Analítico (Raciocínio)', group: 'communication', color: 'bg-indigo-400' },
+  { key: 'emotionality', label: '🎭 Emocionalidade (Impulso)', group: 'communication', color: 'bg-pink-400' },
+  { key: 'price_sensitivity', label: '💰 Sensibilidade a Preço (Defesa)', group: 'decision', color: 'bg-amber-400' },
+  { key: 'trust_gap', label: '🔍 Fenda de Desconfiança (Bloqueio)', group: 'decision', color: 'bg-rose-500' },
+  { key: 'urgency', label: '⏳ Senso de Urgência (Agilidade)', group: 'decision', color: 'bg-emerald-400 glow-green' },
+  { key: 'decision_speed', label: '⚡ Velocidade de Decisão (Aceleração)', group: 'decision', color: 'bg-yellow-400' }
 ];
 
-// Utilitário para gerar Turn IDs únicos para simulação de chat
-function generateUniqueTurnId() {
-  return 'turn_web_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+// Inicialização da central de controle
+document.addEventListener('DOMContentLoaded', () => {
+  initSecurity();
+  setupEventListeners();
+  loadLeads();
+  loadDashboardStats();
+});
+
+// 1. GERENCIADOR DE CHAVE DE API (localStorage)
+function initSecurity() {
+  const apiKey = localStorage.getItem('sb_api_key');
+  const apiStatus = document.getElementById('api-key-status');
+  
+  if (!apiKey) {
+    apiStatus.textContent = 'NÃO CONFIGURADO';
+    apiStatus.className = 'text-xs font-mono text-rose-500 font-bold';
+    showApiKeyModal();
+  } else {
+    apiStatus.textContent = 'ATIVO';
+    apiStatus.className = 'text-xs font-mono text-emerald-400 font-bold';
+  }
 }
 
-// Cabeçalhos de requisição com injeção dinâmica de API Key
+function showApiKeyModal() {
+  const modal = document.getElementById('modal-api-key');
+  const input = document.getElementById('modal-api-key-input');
+  const savedKey = localStorage.getItem('sb_api_key');
+  
+  if (savedKey) {
+    input.value = savedKey;
+  }
+  
+  modal.showModal();
+}
+
 function getHeaders() {
-  const apiKey = document.getElementById('api-key-input').value.trim();
+  const apiKey = localStorage.getItem('sb_api_key') || '';
   return {
     'Content-Type': 'application/json',
     'X-API-Key': apiKey
   };
 }
 
-// Inicialização da aplicação
-document.addEventListener('DOMContentLoaded', () => {
-  loadLeads();
-  setupEventListeners();
-});
+// 2. SISTEMA DE NOTIFICAÇÕES TOAST (Elegância HUD)
+function showToast(message, type = 'success') {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  
+  // Cores baseadas no tipo de feedback do sistema
+  let bgBorderClass = 'bg-zinc-900 border-emerald-500/30 text-zinc-100 glow-green';
+  let icon = '⚡';
+  
+  if (type === 'error') {
+    bgBorderClass = 'bg-zinc-900 border-rose-500/30 text-rose-400';
+    icon = '🚨';
+  } else if (type === 'warning') {
+    bgBorderClass = 'bg-zinc-900 border-amber-500/30 text-amber-400 glow-amber';
+    icon = '⚠️';
+  } else if (type === 'info') {
+    bgBorderClass = 'bg-zinc-900 border-sky-500/30 text-sky-400';
+    icon = 'ℹ️';
+  }
+  
+  toast.className = `flex items-center gap-3 border p-4 rounded-xs shadow-2xl transition-all duration-300 transform translate-x-8 opacity-0 font-mono text-xs ${bgBorderClass} pointer-events-auto`;
+  toast.innerHTML = `
+    <span class="text-base">${icon}</span>
+    <div class="flex-1">${message}</div>
+    <button class="text-zinc-500 hover:text-zinc-300 transition-colors ml-2 font-bold cursor-pointer" onclick="this.parentElement.remove()">[X]</button>
+  `;
+  
+  container.appendChild(toast);
+  
+  // Traciona a animação de entrada
+  setTimeout(() => {
+    toast.classList.remove('translate-x-8', 'opacity-0');
+  }, 10);
+  
+  // Auto-destruição após 4 segundos
+  setTimeout(() => {
+    toast.classList.add('translate-x-8', 'opacity-0');
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
+}
 
-// Configurar ouvintes de eventos de formulários e botões
+// Utilitário para gerar Turn IDs simulando mensageria real
+function generateUniqueTurnId() {
+  return 'turn_web_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+}
+
+// 3. LISTENERS GERAIS DE EVENTOS DO HUD
 function setupEventListeners() {
-  // Modal de Criação de Novo Lead
-  const modal = document.getElementById('modal-lead');
+  // Modal de API Key
+  const btnChangeKey = document.getElementById('btn-change-api-key');
+  const formApiKey = document.getElementById('form-api-key');
+  
+  btnChangeKey.addEventListener('click', showApiKeyModal);
+  
+  formApiKey.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const key = document.getElementById('modal-api-key-input').value.trim();
+    
+    if (key) {
+      localStorage.setItem('sb_api_key', key);
+      initSecurity();
+      document.getElementById('modal-api-key').close();
+      showToast('Token de Segurança atualizado com sucesso!', 'success');
+      loadLeads();
+      loadDashboardStats();
+    } else {
+      showToast('Por favor, insira um token válido.', 'error');
+    }
+  });
+
+  // Modal de Recrutamento de Lead
+  const modalLead = document.getElementById('modal-lead');
   const btnNewLead = document.getElementById('btn-new-lead');
   const btnCloseModal = document.getElementById('modal-close-btn');
   const formLead = document.getElementById('form-new-lead');
 
-  btnNewLead.addEventListener('click', () => modal.showModal());
-  btnCloseModal.addEventListener('click', () => modal.close());
+  btnNewLead.addEventListener('click', () => modalLead.showModal());
+  btnCloseModal.addEventListener('click', () => modalLead.close());
 
   formLead.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -54,7 +146,7 @@ function setupEventListeners() {
     const externalId = document.getElementById('lead-ext-input').value.trim();
 
     try {
-      // Ingerimos um primeiro turno de boas-vindas do sistema para inicializar o Lead e suas tabelas
+      // Inicia o lead com um turn de sistema para forçar criação em banco
       const response = await fetch('/v1/turns/ingest', {
         method: 'POST',
         headers: getHeaders(),
@@ -64,30 +156,38 @@ function setupEventListeners() {
           leadName: name,
           conversationExternalId: 'conv_init_' + externalId,
           role: 'system',
-          content: `Lead ${name} registrado no painel de administração.`
+          content: `Lead ${name} recrutado e inicializado na central de comando.`
         })
       });
 
       if (!response.ok) {
         const errData = await response.json();
-        throw new Error(errData.message || 'Erro ao registrar lead');
+        throw new Error(errData.message || 'Erro ao recrutar lead');
       }
 
       formLead.reset();
-      modal.close();
+      modalLead.close();
+      showToast(`Combatente ${name} recrutado com sucesso!`, 'success');
       
-      // Recarrega lista e seleciona o lead novo criado
+      // Recarrega leads e estatísticas
       await loadLeads();
-      const newLead = await findLeadByExternalIdInLocalList(externalId);
+      await loadDashboardStats();
+      
+      const newLead = allLeads.find(l => l.externalId === externalId);
       if (newLead) {
         selectLead(newLead.id, newLead.externalId, newLead.name);
       }
     } catch (err) {
-      alert(`Falha ao registrar novo Lead: ${err.message}`);
+      showToast(`Falha ao recrutar combatente: ${err.message}`, 'error');
     }
   });
 
-  // Envio de Mensagem no Chat Playground
+  // Input de Busca
+  document.getElementById('lead-search').addEventListener('input', (e) => {
+    filterLeads(e.target.value.trim());
+  });
+
+  // Envio de turnos no Chat Playground
   const chatForm = document.getElementById('chat-form');
   chatForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -97,7 +197,6 @@ function setupEventListeners() {
 
     if (!content || !activeLeadExternalId) return;
 
-    // Desativa temporariamente para evitar duplo clique
     input.disabled = true;
     submitBtn.disabled = true;
 
@@ -117,15 +216,17 @@ function setupEventListeners() {
       });
 
       if (!response.ok) {
-        throw new Error('Não foi possível registrar mensagem no backend.');
+        throw new Error('Não foi possível processar a mensagem na central.');
       }
 
       input.value = '';
+      showToast('Turno de mensagem ingerido! Recalibrando inteligência...', 'info');
       
-      // Recarrega todos os dados de inteligência do lead para assistir as calibrações em tempo real!
+      // Recarrega dados e estatísticas
       await refreshActiveLeadData();
+      await loadDashboardStats();
     } catch (err) {
-      alert(`Erro ao processar mensagem: ${err.message}`);
+      showToast(`Erro no envio: ${err.message}`, 'error');
     } finally {
       input.disabled = false;
       submitBtn.disabled = false;
@@ -134,157 +235,284 @@ function setupEventListeners() {
   });
 }
 
-// Localizar lead na lista local
-async function findLeadByExternalIdInLocalList(externalId) {
+// 4. LOADER DE STATS DO DASHBOARD (Novos Endpoints reais)
+async function loadDashboardStats() {
   try {
-    const res = await fetch('/v1/leads', { headers: getHeaders() });
-    if (res.ok) {
-      const leads = await res.json();
-      return leads.find(l => l.externalId === externalId);
-    }
-  } catch {}
-  return null;
+    const res = await fetch('/v1/admin/stats', { headers: getHeaders() });
+    if (!res.ok) throw new Error();
+    
+    const stats = await res.json();
+    
+    // Atualiza os contadores
+    document.getElementById('kpi-total-leads').textContent = stats.totalLeads || 0;
+    document.getElementById('kpi-turns-today').textContent = stats.turnsToday || 0;
+    document.getElementById('kpi-active-objections').textContent = stats.funnelDistribution?.OBJECTION_HANDLING || 0;
+    document.getElementById('kpi-closing-leads').textContent = stats.funnelDistribution?.CLOSING || 0;
+  } catch (err) {
+    console.error('Falha ao carregar métricas administrativas do painel:', err);
+  }
 }
 
-// Carregar listagem de leads do banco SQLite
+// 5. LISTAR LEADS COM FILTROS E SKELETON
 async function loadLeads() {
   const container = document.getElementById('leads-list');
   
   try {
-    const response = await fetch('/v1/leads', {
-      headers: getHeaders()
-    });
+    const response = await fetch('/v1/leads', { headers: getHeaders() });
 
     if (!response.ok) {
       if (response.status === 401) {
-        container.innerHTML = `<div class="text-xs text-amber-700 font-semibold py-3 text-center bg-amber-50 rounded-sm border border-amber-100">API Key Inválida no Cabeçalho!</div>`;
+        container.innerHTML = `<div class="text-xs text-rose-400 font-mono py-4 text-center border border-rose-500/20 bg-rose-950/20">CREDENCIAIS INVÁLIDAS. VERIFIQUE SUA API KEY.</div>`;
         return;
       }
       throw new Error();
     }
 
-    const leads = await response.json();
+    allLeads = await response.json();
+    renderLeadsList(allLeads);
     
-    if (leads.length === 0) {
-      container.innerHTML = `<div class="text-xs text-slate-400 py-3 text-center">Nenhum lead cadastrado ainda.</div>`;
-      return;
-    }
-
-    container.innerHTML = leads.map(lead => `
-      <button 
-        onclick="selectLead('${lead.id}', '${lead.externalId}', '${lead.name}')"
-        id="btn-lead-${lead.id}"
-        class="lead-select-btn text-left text-xs px-3 py-2.5 rounded-md hover:bg-slate-100 transition-all font-medium border border-transparent flex flex-col gap-0.5 cursor-pointer"
-      >
-        <span class="text-slate-900 font-semibold font-display">${lead.name}</span>
-        <span class="text-[10px] text-slate-400 font-mono tracking-tight">${lead.externalId}</span>
-      </button>
-    `).join('');
-
-    // Se houver lead ativo, mantém a seleção. Senão, seleciona o primeiro
+    // Seletor inicial automático
     if (activeLeadId) {
       highlightActiveLead(activeLeadId);
     }
   } catch (err) {
-    container.innerHTML = `<div class="text-xs text-rose-700 py-3 text-center bg-rose-50 rounded-sm border border-rose-100">Falha ao conectar com a API.</div>`;
+    container.innerHTML = `<div class="text-xs text-rose-500 font-mono py-4 text-center border border-rose-500/20 bg-rose-950/20">FALHA AO CONECTAR COM A ENGINE.</div>`;
   }
 }
 
-// Destacar botão do lead selecionado
+function renderLeadsList(leads) {
+  const container = document.getElementById('leads-list');
+  const searchCount = document.getElementById('search-count');
+  
+  searchCount.textContent = `${leads.length} de ${allLeads.length} leads`;
+  
+  if (leads.length === 0) {
+    container.innerHTML = `<div class="text-xs text-zinc-500 font-mono py-4 text-center border border-zinc-800 bg-zinc-900/20">NENHUM LEAD CONFORME FILTRO.</div>`;
+    return;
+  }
+
+  container.innerHTML = leads.map(lead => {
+    // Definir pontinho de humor baseado no status do lead
+    let dotColor = 'bg-sky-400';
+    if (lead.status === 'closing') dotColor = 'bg-emerald-400 glow-green';
+    else if (lead.status === 'objections') dotColor = 'bg-amber-500 glow-amber';
+
+    return `
+      <button 
+        onclick="selectLead('${lead.id}', '${lead.externalId}', '${lead.name}')"
+        id="btn-lead-${lead.id}"
+        class="lead-select-btn w-full text-left text-xs px-3.5 py-3 rounded-xs hover:bg-zinc-900 transition-all font-medium border border-zinc-850 flex items-center justify-between gap-2 cursor-pointer bg-zinc-900/40"
+      >
+        <div class="flex flex-col gap-0.5">
+          <span class="text-zinc-100 font-bold font-display text-xs">${lead.name}</span>
+          <span class="text-[9px] text-zinc-500 font-mono tracking-tight">${lead.externalId}</span>
+        </div>
+        <span class="h-2 w-2 rounded-full ${dotColor}"></span>
+      </button>
+    `;
+  }).join('');
+}
+
+function filterLeads(query) {
+  if (!query) {
+    renderLeadsList(allLeads);
+    return;
+  }
+  
+  const lowerQuery = query.toLowerCase();
+  const filtered = allLeads.filter(lead => 
+    lead.name.toLowerCase().includes(lowerQuery) || 
+    lead.externalId.toLowerCase().includes(lowerQuery)
+  );
+  
+  renderLeadsList(filtered);
+}
+
 function highlightActiveLead(leadId) {
   document.querySelectorAll('.lead-select-btn').forEach(btn => {
-    btn.classList.remove('bg-slate-900', 'text-white', 'border-slate-900', 'hover:bg-slate-900');
-    btn.classList.add('hover:bg-slate-100');
-    // Restaurar cores de textos filhos
-    const nameSpan = btn.querySelector('span:first-child');
-    const extSpan = btn.querySelector('span:last-child');
-    if (nameSpan) nameSpan.className = 'text-slate-900 font-semibold font-display';
-    if (extSpan) extSpan.className = 'text-slate-400 font-mono tracking-tight';
+    btn.classList.remove('bg-zinc-900', 'border-emerald-500/50', 'bg-zinc-800/80');
+    btn.classList.add('bg-zinc-900/40');
   });
 
   const activeBtn = document.getElementById(`btn-lead-${leadId}`);
   if (activeBtn) {
-    activeBtn.classList.remove('hover:bg-slate-100');
-    activeBtn.classList.add('bg-slate-900', 'text-white', 'border-slate-900', 'hover:bg-slate-900');
-    
-    const nameSpan = activeBtn.querySelector('span:first-child');
-    const extSpan = activeBtn.querySelector('span:last-child');
-    if (nameSpan) nameSpan.className = 'text-white font-semibold font-display';
-    if (extSpan) extSpan.className = 'text-slate-300 font-mono tracking-tight';
+    activeBtn.classList.remove('bg-zinc-900/40');
+    activeBtn.classList.add('bg-zinc-800/80', 'border-emerald-500/50');
   }
 }
 
-// Selecionar Lead e disparar carregamentos em paralelo
+// 6. SELEÇÃO DE LEAD (Com disparos assíncronos e Skeleton)
 async function selectLead(leadId, externalId, name) {
   activeLeadId = leadId;
   activeLeadExternalId = externalId;
   activeLeadName = name;
 
   highlightActiveLead(leadId);
+  showToast(`Combatente selecionado: ${name}. Sincronizando ficha...`, 'info');
 
-  // Destrava e ativa o painel direito e inputs de chat
+  // Habilita contêineres principais
   const panel = document.getElementById('intelligence-panel');
-  panel.classList.remove('opacity-60', 'pointer-events-none');
+  panel.classList.remove('opacity-40', 'pointer-events-none');
   
   document.getElementById('chat-input').disabled = false;
   document.getElementById('chat-submit').disabled = false;
-  document.getElementById('chat-lead-badge').textContent = name;
+  document.getElementById('chat-lead-badge').textContent = name.toUpperCase();
 
-  // Atualizar cabeçalhos de Lead
+  // Iniciais do Avatar RPG
+  const initials = name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+  document.getElementById('char-initials').textContent = initials;
   document.getElementById('lead-name-title').textContent = name;
-  document.getElementById('lead-id-subtitle').textContent = `UUID: ${leadId} | EXTERNAL: ${externalId}`;
+  document.getElementById('lead-id-subtitle').textContent = `UUID: ${leadId} | CONEXÃO: ${externalId}`;
 
-  // Executa o carregamento reativo em paralelo
+  // Coloca placeholders de Skeletons nas áreas
+  document.getElementById('persona-eixes').innerHTML = `
+    <div class="flex flex-col gap-3 w-full">
+      <div class="h-6 skeleton rounded-xs opacity-60"></div>
+      <div class="h-6 skeleton rounded-xs opacity-40"></div>
+      <div class="h-6 skeleton rounded-xs opacity-20"></div>
+    </div>
+  `;
+
   await refreshActiveLeadData();
 }
 
-// Atualizar todos os dados do Lead Selecionado
+// 7. CARREGAMENTO E ATUALIZAÇÃO DOS DADOS DE INTELIGÊNCIA COMERCIAL
 async function refreshActiveLeadData() {
   if (!activeLeadId) return;
 
   try {
     const headers = getHeaders();
     
-    // Disparos assíncronos paralelos para performance excelente
+    // Dispara requests paralelos (Excelente performance)
     const [resPersona, resReply, resMemory] = await Promise.all([
       fetch(`/v1/leads/${activeLeadId}/persona`, { headers }),
       fetch(`/v1/leads/${activeLeadId}/reply/recommend`, { headers }),
       fetch(`/v1/leads/${activeLeadId}/memory`, { headers })
     ]);
 
-    // 1. Processar e renderizar a Persona
+    // 1. Processamento e gamificação da Persona Comportamental
+    let communicationProfile = {};
+    let decisionProfile = {};
+    let activeStage = 'QUALIFICATION';
+    
     if (resPersona.ok) {
       const data = await resPersona.json();
+      communicationProfile = data.persona?.communication_profile || {};
+      decisionProfile = data.persona?.decision_profile || {};
       renderPersona(data.persona);
     } else {
       renderEmptyPersona();
     }
 
-    // 2. Processar e renderizar as Diretrizes e o Chat History
+    // 2. Processamento de Diretrizes e Arena de Mensagens
     if (resReply.ok) {
       const data = await resReply.json();
+      activeStage = data.funnel_stage || 'QUALIFICATION';
       renderStrategy(data);
     }
 
-    // 3. Processar e renderizar as abas de Memória
+    // 3. Processamento de Fatos de Abas e logs de auditoria real
     if (resMemory.ok) {
       const data = await resMemory.json();
-      // Mapear memórias para as abas
       currentLeadMemories.hot = data.memory.hot || [];
       currentLeadMemories.profile = data.memory.profile || [];
       
-      // Buscar logs de auditoria
-      await loadAuditLogs();
-
+      // Busca logs de auditoria REAIS do banco Prisma
+      await fetchRealAuditLogs();
       renderActiveTab();
     }
 
+    // 4. Executa a Gamificação Avançada do Lead
+    gamifyLead(communicationProfile, decisionProfile, activeStage);
+
   } catch (err) {
-    console.error('Erro ao atualizar dados reativos do lead:', err);
+    showToast('Falha crítica ao sincronizar inteligência comercial.', 'error');
   }
 }
 
-// Renderização das calibrações de Persona (Barras horizontais elegantes)
+// 8. LOGICA DE GAMIFICAÇÃO (XP, LV, CONQUISTAS, DINÂMICAS RPG)
+function gamifyLead(commProfile, decProfile, stage) {
+  // A. Cálculo de XP e Level
+  // Contamos quantas variáveis de persona foram calibradas
+  const commKeysCalibrated = Object.values(commProfile).filter(v => v !== 0.5).length;
+  const decKeysCalibrated = Object.values(decProfile).filter(v => v !== 0.5).length;
+  
+  // Total de interações nas memórias quentes e logs
+  const totalFatos = currentLeadMemories.hot.length + currentLeadMemories.profile.length;
+  
+  // Cálculo de XP base:
+  let xp = 10 + (commKeysCalibrated * 8) + (decKeysCalibrated * 8) + (totalFatos * 4);
+  xp = Math.min(100, Math.max(10, xp));
+  
+  // Nível de Combatente baseado na telemetria
+  const level = Math.min(5, Math.floor(xp / 20) + 1);
+  
+  document.getElementById('char-level-badge').textContent = `LV.${level}`;
+  document.getElementById('engagement-xp-bar').style.width = `${xp}%`;
+  document.getElementById('engagement-xp-text').textContent = `${xp}% XP`;
+
+  // B. Humor e Temperatura (Visualização dinâmica)
+  // Baseado no senso de urgência
+  const urgency = decProfile.urgency ?? 0.5;
+  let tempText = 'FRIO';
+  let tempColor = 'text-sky-400';
+  let activeBars = 1;
+  
+  if (stage === 'CLOSING' || urgency > 0.85) {
+    tempText = '🔥 FERVENDO';
+    tempColor = 'text-emerald-400 glow-green animate-pulse';
+    activeBars = 4;
+  } else if (urgency > 0.60) {
+    tempText = '⚡ QUENTE';
+    tempColor = 'text-amber-500 glow-amber';
+    activeBars = 3;
+  } else if (urgency > 0.35 || xp > 40) {
+    tempText = '☀️ MORNIO';
+    tempColor = 'text-yellow-400';
+    activeBars = 2;
+  }
+  
+  const tempLabel = document.getElementById('temperature-text');
+  tempLabel.textContent = tempText;
+  tempLabel.className = `text-sm font-black font-display tracking-wider uppercase ${tempColor}`;
+  
+  // Atualiza as barrinhas de calor de forma elegante
+  for (let i = 1; i <= 4; i++) {
+    const bar = document.getElementById(`temp-bar-${i}`);
+    bar.className = 'h-full w-full transition-all duration-300 ';
+    
+    if (i <= activeBars) {
+      if (activeBars === 4) bar.className += 'bg-emerald-400';
+      else if (activeBars === 3) bar.className += 'bg-amber-500';
+      else if (activeBars === 2) bar.className += 'bg-yellow-400';
+      else bar.className += 'bg-sky-400';
+    } else {
+      bar.className += 'bg-zinc-800';
+    }
+  }
+
+  // C. Desbloqueio Dinâmico de Conquistas (Achievements)
+  const isDecisor = (decProfile.decision_speed > 0.6) || (decProfile.trust_gap < 0.45);
+  const isComprador = (decProfile.urgency > 0.6) || (stage === 'VALUE_PROOF' || stage === 'CLOSING');
+  const isNegociador = (decProfile.price_sensitivity > 0.65);
+  const isUrgente = (decProfile.urgency > 0.7);
+
+  updateAchievementBadge('badge-decisor', isDecisor, '👑 DECISOR ELITE');
+  updateAchievementBadge('badge-comprador', isComprador, '🔥 INTERESSE CRÍTICO');
+  updateAchievementBadge('badge-negociador', isNegociador, '🛡️ NEGOCIADOR DURO');
+  updateAchievementBadge('badge-urgente', isUrgente, '⏳ AGILIDADE CRÍTICA');
+}
+
+function updateAchievementBadge(badgeId, unlocked, text) {
+  const badge = document.getElementById(badgeId);
+  if (unlocked) {
+    badge.className = 'achievement-badge text-[8px] font-mono font-bold border border-emerald-500/50 bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded-xs uppercase scale-105 duration-300 glow-green';
+  } else {
+    badge.className = 'achievement-badge text-[8px] font-mono font-bold border border-zinc-800 bg-zinc-950 text-zinc-700 px-2.5 py-1 rounded-xs uppercase opacity-35 scale-100 duration-300';
+  }
+}
+
+// 9. RENDERIZAÇÃO DA PERSONA COMPORTAMENTAL
 function renderPersona(persona) {
   const container = document.getElementById('persona-eixes');
   if (!persona) {
@@ -293,7 +521,7 @@ function renderPersona(persona) {
   }
 
   container.innerHTML = personaEixesDefinition.map(def => {
-    let scoreVal = 0.5; // Padrão
+    let scoreVal = 0.5;
     if (def.group === 'communication') {
       scoreVal = persona.communication_profile?.[def.key] ?? 0.5;
     } else {
@@ -302,25 +530,25 @@ function renderPersona(persona) {
     
     const percentage = Math.round(scoreVal * 100);
     
-    // Determinar cores dinâmicas baseadas no score para status minimalistas
-    let barColor = 'bg-slate-900'; // Cor padrão minimalista suíço
+    // Altera cor de acordo com traços críticos
+    let customColor = def.color;
     if (def.key === 'trust_gap' && scoreVal > 0.7) {
-      barColor = 'bg-amber-600'; // Advertência de desconfiança
+      customColor = 'bg-rose-600';
     } else if (def.key === 'price_sensitivity' && scoreVal > 0.7) {
-      barColor = 'bg-slate-700';
+      customColor = 'bg-amber-600';
     } else if (def.key === 'urgency' && scoreVal > 0.7) {
-      barColor = 'bg-emerald-700'; // Foco em urgência de compra
+      customColor = 'bg-emerald-500 glow-green';
     }
 
     return `
-      <div class="flex flex-col gap-1 text-xs">
-        <div class="flex justify-between items-center text-slate-700">
+      <div class="flex flex-col gap-1 text-[11px]">
+        <div class="flex justify-between items-center text-zinc-400 font-mono">
           <span class="font-medium">${def.label}</span>
-          <span class="font-mono text-[10px] font-semibold">${percentage}%</span>
+          <span class="font-bold text-zinc-200">${percentage}%</span>
         </div>
-        <div class="h-2 w-full bg-slate-100 rounded-xs overflow-hidden border border-slate-200/50">
+        <div class="h-2 w-full bg-zinc-950 rounded-xs overflow-hidden border border-zinc-800">
           <div 
-            class="h-full ${barColor} transition-all duration-500 ease-out" 
+            class="h-full ${customColor} transition-all duration-500 ease-out" 
             style="width: ${percentage}%"
           ></div>
         </div>
@@ -331,39 +559,39 @@ function renderPersona(persona) {
 
 function renderEmptyPersona() {
   const container = document.getElementById('persona-eixes');
-  container.innerHTML = `<div class="text-xs text-slate-400 py-6 text-center">Nenhum score comportamental calculado ainda para este Lead. Envie mensagens para calibrar.</div>`;
+  container.innerHTML = `<div class="text-[11px] text-zinc-500 font-mono py-8 text-center border border-zinc-850 rounded-xs bg-zinc-950/20">NENHUMA TELEMETRIA COMPORTAMENTAL DISPONÍVEL. INTERAJA NO CHAT PARA CALIBRAR OS ATRIBUTOS RPG.</div>`;
 }
 
-// Renderização das Diretrizes de Estratégia e do Histórico de Chat
+// 10. RENDERIZAÇÃO DE DIRETRIZES TÁTICAS E CHAT PLAYGROUND
 function renderStrategy(strategyContext) {
-  // 1. Atualizar Estágio do Funil
+  // A. Estágio Comercial Funil
   const stageBadge = document.getElementById('funnel-stage-badge');
   stageBadge.textContent = strategyContext.funnel_stage;
   
-  // Cores dinâmicas sutis para os estágios do funil comercial
-  stageBadge.className = 'text-xs font-semibold font-display tracking-widest px-3 py-1.5 rounded-sm uppercase mt-0.5 shadow-2xs border';
+  // Estilos baseados no estágio
+  stageBadge.className = 'text-[9px] font-mono font-bold tracking-widest px-2.5 py-1 rounded-xs uppercase shadow-2xs border transition-all duration-300';
   if (strategyContext.funnel_stage === 'CLOSING') {
-    stageBadge.classList.add('bg-emerald-50', 'text-emerald-800', 'border-emerald-200');
+    stageBadge.classList.add('bg-emerald-500/10', 'text-emerald-400', 'border-emerald-500/30', 'glow-green');
   } else if (strategyContext.funnel_stage === 'OBJECTION_HANDLING') {
-    stageBadge.classList.add('bg-amber-50', 'text-amber-800', 'border-amber-200');
+    stageBadge.classList.add('bg-amber-500/10', 'text-amber-450', 'border-amber-500/30', 'glow-amber');
   } else if (strategyContext.funnel_stage === 'VALUE_PROOF') {
-    stageBadge.classList.add('bg-slate-900', 'text-white', 'border-slate-900');
+    stageBadge.classList.add('bg-sky-500/10', 'text-sky-400', 'border-sky-500/30');
   } else {
-    stageBadge.classList.add('bg-slate-100', 'text-slate-700', 'border-slate-200');
+    stageBadge.classList.add('bg-zinc-950', 'text-zinc-400', 'border-zinc-850');
   }
 
-  // 2. Atualizar Caixas de Diretrizes Comerciais
-  document.getElementById('strategy-best-move').textContent = strategyContext.strategy.best_move || 'Foque em qualificar o real interesse do cliente.';
-  document.getElementById('strategy-do-not-do').textContent = strategyContext.strategy.do_not_do || 'Evite pressa ou forçar vendas de imediato.';
-  document.getElementById('strategy-cta').textContent = strategyContext.strategy.cta_style || 'CTA Suave.';
-  document.getElementById('strategy-length').textContent = strategyContext.strategy.message_length.replace('_', ' ');
+  // B. Táticas Grimório
+  document.getElementById('strategy-best-move').textContent = strategyContext.strategy?.best_move || 'Dispare argumentos de autoridade e consolide fatos chave.';
+  document.getElementById('strategy-do-not-do').textContent = strategyContext.strategy?.do_not_do || 'Evite pressionar o combatente ou usarCTAs muito invasivas.';
+  document.getElementById('strategy-cta').textContent = strategyContext.strategy?.cta_style || 'CTA Sutil.';
+  document.getElementById('strategy-length').textContent = strategyContext.strategy?.message_length?.replace('_', ' ') || 'CURTO';
 
-  // 3. Renderizar Mensagens de Chat Playground
+  // C. Renderizador Arena de Chat
   const chatMessages = document.getElementById('chat-messages');
   const conversations = strategyContext.recent_conversation || [];
 
   if (conversations.length === 0) {
-    chatMessages.innerHTML = `<div class="text-xs text-slate-400 text-center my-auto">Nenhuma conversa registrada. Digite uma mensagem abaixo para iniciar a simulação!</div>`;
+    chatMessages.innerHTML = `<div class="text-[11px] text-zinc-500 font-mono text-center my-auto bg-zinc-950/20 border border-zinc-850 p-4 rounded-xs">ARENA VAZIA. NENHUM COMBATE ENCONTRADO. DISPARE MENSAGENS ABAIXO.</div>`;
     return;
   }
 
@@ -371,69 +599,72 @@ function renderStrategy(strategyContext) {
     const isUser = msg.role === 'user';
     const isSystem = msg.role === 'system';
     
-    let containerClass = 'flex flex-col max-w-[85%] rounded-md px-3.5 py-2.5 shadow-2xs ';
+    let containerClass = 'flex flex-col max-w-[85%] rounded-xs px-3.5 py-2.5 shadow-md border ';
     let alignmentClass = 'justify-start mr-auto ';
     
     if (isUser) {
-      containerClass += 'bg-slate-900 text-white';
+      containerClass += 'bg-zinc-900 border-zinc-800 text-zinc-100 font-mono text-[11px]';
       alignmentClass = 'justify-end ml-auto';
     } else if (isSystem) {
-      containerClass += 'bg-slate-100 text-slate-500 border border-slate-200 text-center font-mono text-[10px] py-1';
+      containerClass += 'bg-zinc-950 text-zinc-500 border-zinc-850 text-center font-mono text-[9px] py-1 max-w-[95%]';
       alignmentClass = 'justify-center mx-auto w-full';
     } else {
-      containerClass += 'bg-white text-slate-800 border border-slate-200';
+      containerClass += 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300 font-mono text-[11px]';
     }
 
     const time = new Date(msg.eventAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
     return `
-      <div class="flex ${alignmentClass} gap-1">
+      <div class="flex ${alignmentClass} gap-1.5 w-full">
         <div class="${containerClass}">
-          <span class="leading-relaxed">${msg.content}</span>
-          ${!isSystem ? `<span class="text-[9px] opacity-60 self-end mt-1.5 font-mono">${time} — ${msg.role.toUpperCase()}</span>` : ''}
+          <span class="leading-relaxed whitespace-pre-line">${msg.content}</span>
+          ${!isSystem ? `<span class="text-[8px] opacity-40 self-end mt-1.5 font-mono font-bold tracking-wider">${time} // ${msg.role.toUpperCase()}</span>` : ''}
         </div>
       </div>
     `;
   }).join('');
 
-  // Scroll automático para a última mensagem
+  // Scroll suave para base
   setTimeout(() => {
     chatMessages.scrollTop = chatMessages.scrollHeight;
   }, 50);
 }
 
-// Carregar Logs de Auditoria
-async function loadAuditLogs() {
+// 11. BUSCADOR DE LOGS DE AUDITORIA REAIS DO BANCO DE DADOS
+async function fetchRealAuditLogs() {
+  if (!activeLeadId) return;
+  
   try {
-    // Buscar diretamente do banco de dados (podemos expor uma rota rápida de auditoria se necessário)
-    // Para simplificar e manter a coesão, se não criamos uma rota específica, simulamos puxando fatos interessantes
-    // do histórico ou mapeando logs lógicos na tela
-    currentLeadMemories.audit = [
-      { id: '1', eventType: 'Análise de Sinais Ativa', payloadJson: 'Sucesso', createdAt: new Date().toISOString() }
-    ];
-  } catch {}
+    const res = await fetch(`/v1/leads/${activeLeadId}/audit?limit=25`, { headers: getHeaders() });
+    if (res.ok) {
+      currentLeadMemories.audit = await res.json();
+    } else {
+      currentLeadMemories.audit = [];
+    }
+  } catch (err) {
+    console.error('Falha ao obter logs reais do banco relacional:', err);
+    currentLeadMemories.audit = [];
+  }
 }
 
-// Gerenciar Alternância de Abas de Memória
+// 12. CONTROLE DE NAVEGAÇÃO DE TABS DE DADOS
 function switchTab(tabName) {
   activeTab = tabName;
   
-  // Atualizar botões das abas na UI
   document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.classList.remove('text-slate-900', 'border-slate-900');
-    btn.classList.add('text-slate-400', 'border-transparent');
+    btn.classList.remove('text-emerald-400', 'border-emerald-500');
+    btn.classList.add('text-zinc-500', 'border-transparent');
   });
 
   const activeBtn = document.getElementById(`tab-${tabName}-btn`);
   if (activeBtn) {
-    activeBtn.classList.remove('text-slate-400', 'border-transparent');
-    activeBtn.classList.add('text-slate-900', 'border-slate-900');
+    activeBtn.classList.remove('text-zinc-500', 'border-transparent');
+    activeBtn.classList.add('text-emerald-400', 'border-emerald-500');
   }
 
   renderActiveTab();
 }
 
-// Renderizar aba ativa de Memórias e Sinais
 function renderActiveTab() {
   const container = document.getElementById('tab-content');
   const badge = document.getElementById('memory-counter-badge');
@@ -442,7 +673,7 @@ function renderActiveTab() {
   badge.textContent = `Total: ${items.length} itens`;
 
   if (items.length === 0) {
-    container.innerHTML = `<div class="text-xs text-slate-400 py-8 text-center">Nenhum item registrado nesta aba.</div>`;
+    container.innerHTML = `<div class="text-[11px] font-mono text-zinc-500 py-8 text-center border border-zinc-850 rounded-xs bg-zinc-950/20">ABAS DE INVENTÁRIO VAZIAS. NENHUM ITEM DISPONÍVEL NO MOMENTO.</div>`;
     return;
   }
 
@@ -450,52 +681,84 @@ function renderActiveTab() {
     container.innerHTML = items.map(item => {
       const isWeakened = item.status === 'weakened';
       const statusClass = isWeakened 
-        ? 'bg-amber-50 text-amber-800 border-amber-200' 
-        : 'bg-emerald-50 text-emerald-800 border-emerald-200';
+        ? 'border-amber-500/25 bg-amber-500/5 text-amber-400' 
+        : 'border-emerald-500/25 bg-emerald-500/5 text-emerald-400 glow-green';
+
+      let valStr = '';
+      try {
+        const valObj = typeof item.valueJson === 'string' ? JSON.parse(item.valueJson) : item.valueJson;
+        valStr = valObj?.value || JSON.stringify(valObj);
+      } catch {
+        valStr = item.valueJson;
+      }
 
       return `
-        <div class="bg-white border border-slate-200 rounded-md p-3.5 mb-2.5 flex justify-between items-start gap-4">
-          <div class="flex flex-col gap-1 text-xs">
-            <span class="font-mono text-[10px] font-semibold text-slate-400 uppercase">Chave: ${item.key}</span>
-            <span class="text-slate-900 font-semibold">${item.valueJson?.value || JSON.stringify(item.valueJson)}</span>
-            ${item.valueJson?.evidence ? `<span class="text-[10px] text-slate-500 italic mt-1 leading-relaxed">Evidência: "${item.valueJson.evidence}"</span>` : ''}
+        <div class="bg-zinc-950/40 border border-zinc-850 p-3.5 mb-2 rounded-xs flex justify-between items-start gap-4">
+          <div class="flex flex-col gap-1 text-xs font-mono">
+            <span class="text-[9px] font-bold text-zinc-500 uppercase">Inventário // ${item.key}</span>
+            <span class="text-zinc-200 font-semibold text-xs leading-relaxed whitespace-pre-line">${valStr}</span>
           </div>
-          <div class="flex flex-col items-end gap-1.5 text-right">
-            <span class="text-[9px] font-semibold border px-2 py-0.5 rounded-sm uppercase ${statusClass}">
+          <div class="flex flex-col items-end gap-1 text-right font-mono">
+            <span class="text-[8px] font-bold border px-2 py-0.5 rounded-xs uppercase ${statusClass}">
               ${item.status}
             </span>
-            <span class="text-[10px] font-mono text-slate-500">Confiança: ${(item.confidence * 100).toFixed(0)}%</span>
+            <span class="text-[9px] text-zinc-500">Confiança: ${(item.confidence * 100).toFixed(0)}%</span>
           </div>
         </div>
       `;
     }).join('');
   } else if (activeTab === 'profile') {
-    container.innerHTML = items.map(item => `
-      <div class="bg-white border border-slate-200 rounded-md p-3.5 mb-2.5 flex justify-between items-start gap-4 text-xs">
-        <div class="flex flex-col gap-0.5">
-          <span class="font-mono text-[10px] font-semibold text-slate-400 uppercase">Chave: ${item.key} (${item.scope})</span>
-          <span class="text-slate-900 font-semibold">${item.valueJson?.value || JSON.stringify(item.valueJson)}</span>
+    container.innerHTML = items.map(item => {
+      let valStr = '';
+      try {
+        const valObj = typeof item.valueJson === 'string' ? JSON.parse(item.valueJson) : item.valueJson;
+        valStr = valObj?.value || JSON.stringify(valObj);
+      } catch {
+        valStr = item.valueJson;
+      }
+
+      return `
+        <div class="bg-zinc-950/40 border border-zinc-850 p-3.5 mb-2 rounded-xs flex justify-between items-start gap-4 text-xs font-mono">
+          <div class="flex flex-col gap-1">
+            <span class="text-[9px] font-bold text-zinc-500 uppercase">Fato Grimório // ${item.key} [${item.memoryScope}]</span>
+            <span class="text-zinc-200 font-semibold leading-relaxed whitespace-pre-line">${valStr}</span>
+          </div>
+          <span class="text-[9px] text-zinc-500 border border-zinc-800 px-2 py-0.5 rounded-xs bg-zinc-950">Origem: ${item.sourceType.toUpperCase()}</span>
         </div>
-        <span class="text-[10px] font-mono text-slate-500">Origem: ${item.sourceType.toUpperCase()}</span>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   } else if (activeTab === 'audit') {
-    // Exibe histórico lógico e auditoria
-    container.innerHTML = `
-      <div class="bg-white border border-slate-200 rounded-md p-3.5 mb-2.5 text-xs flex flex-col gap-2 font-mono">
-        <div class="flex justify-between items-center text-[10px] text-slate-400">
-          <span>EVENTO: turn_ingested</span>
-          <span>${new Date().toLocaleTimeString()}</span>
+    container.innerHTML = items.map(log => {
+      const time = new Date(log.createdAt).toLocaleTimeString('pt-BR');
+      const date = new Date(log.createdAt).toLocaleDateString('pt-BR');
+      
+      let payloadStr = '';
+      try {
+        payloadStr = typeof log.payloadJson === 'string' ? log.payloadJson : JSON.stringify(log.payloadJson, null, 2);
+      } catch {
+        payloadStr = log.payloadJson;
+      }
+
+      return `
+        <div class="bg-zinc-950/60 border border-zinc-850 p-3.5 mb-2 text-xs flex flex-col gap-2 font-mono">
+          <div class="flex justify-between items-center text-[9px] text-zinc-500 border-b border-zinc-800 pb-1.5">
+            <span class="font-bold text-emerald-400 uppercase">⚡ Evento: ${log.eventType}</span>
+            <span>${date} // ${time}</span>
+          </div>
+          <div class="text-zinc-300 leading-relaxed text-[11px]">
+            ${log.eventType === 'turn_ingested' ? 'Turno de mensagens recebido na API. O Sales Brain avaliou os fatos contextuais no prompt, e recalibrou a persona viva em banco SQLite.' : ''}
+            ${log.eventType === 'signal_extracted' ? 'Parâmetro de sinal cognitivo processado de forma reativa e persistido como inteligência no funil de vendas.' : ''}
+            ${log.eventType === 'strategy_recomputed' ? 'Diretrizes táticas de conversão recalculadas.' : ''}
+            ${log.eventType !== 'turn_ingested' && log.eventType !== 'signal_extracted' && log.eventType !== 'strategy_recomputed' ? `Ação administrativa executada com sucesso na tabela audit_events.` : ''}
+          </div>
+          ${payloadStr && payloadStr !== '{}' && payloadStr !== 'null' ? `
+            <details class="text-[9px] text-zinc-500 cursor-pointer">
+              <summary class="hover:text-zinc-300 transition-colors uppercase font-bold">[ Ver Metadados Adicionais ]</summary>
+              <pre class="bg-zinc-950 border border-zinc-800 p-2.5 rounded-xs mt-2 overflow-x-auto text-zinc-400 font-mono text-[9px] max-h-24 select-text">${payloadStr}</pre>
+            </details>
+          ` : ''}
         </div>
-        <p class="text-slate-800">Turno de mensagens processado, heurísticas de sinais extraídas e consolidadas no banco relacional dev.db.</p>
-      </div>
-      <div class="bg-white border border-slate-200 rounded-md p-3.5 mb-2.5 text-xs flex flex-col gap-2 font-mono">
-        <div class="flex justify-between items-center text-[10px] text-slate-400">
-          <span>EVENTO: strategy_recomputed</span>
-          <span>${new Date().toLocaleTimeString()}</span>
-        </div>
-        <p class="text-slate-800">Nova persona e estratégia comercial recalculadas com base em decaimento temporal e contradições lógicas.</p>
-      </div>
-    `;
+      `;
+    }).join('');
   }
 }

@@ -16,4 +16,13 @@ export const AuditRepository = {
       },
     });
   },
+
+  async findByLeadId(leadId: string, limit = 20) {
+    return prisma.auditEvent.findMany({
+      where: { leadId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+  },
 };
+
