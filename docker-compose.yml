@@ -1,6 +1,20 @@
 version: "3.9"
 
 services:
+  app:
+    build: .
+    container_name: sales_brain_app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - REDIS_URL=redis://redis:6379
+    env_file:
+      - .env
+    depends_on:
+      - redis
+
   postgres:
     image: postgres:16-alpine
     container_name: sales_brain_postgres
