@@ -1,0 +1,168 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Lead {
+  id         String   @id @default(uuid())
+  externalId String   @unique
+  name       String
+  phone      String?
+  email      String?
+  source     String?
+  status     String   @default("active")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  conversations        Conversation[]
+  signals             Signal[]
+  memoryItems         MemoryItem[]
+  personaSnapshots    PersonaSnapshot[]
+  strategySnapshots   StrategySnapshot[]
+  replyRecommendations ReplyRecommendation[]
+  auditEvents         AuditEvent[]
+
+  @@index([status])
+  @@map("leads")
+}
+
+model Conversation {
+  id        String    @id @default(uuid())
+  leadId    String
+  channel   String
+  title     String?
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  lead Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  turns Turn[]
+
+  @@index([leadId])
+  @@map("conversations")
+}
+
+model Turn {
+  id             String   @id @default(uuid())
+  conversationId String
+  turnId         String   @unique // Para garantir a idempotência estrita
+  role           String   // user, assistant, operator, system
+  content        String
+  contentType    String   @default("text")
+  metadataJson   String?  // SQLite não suporta tipo Json nativo, salvamos como String serializada
+  createdAt      DateTime @default(now())
+  eventAt        DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  signals      Signal[]
+  replyRecommendations ReplyRecommendation[]
+
+  @@index([conversationId])
+  @@index([eventAt])
+  @@map("turns")
+}
+
+model Signal {
+  id           String   @id @default(uuid())
+  leadId       String
+  turnId       String
+  signalType   String   // purchase_intent, urgency, price_sensitivity, etc
+  signalValue  String   // valor categórico ou textual
+  score        Float    // SQLite não suporta Decimal nativo, usamos Float
+  evidenceJson String?  // SQLite não suporta tipo Json nativo, salvamos como String serializada
+  createdAt    DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  turn Turn @relation(fields: [turnId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([turnId])
+  @@map("signals")
+}
+
+model MemoryItem {
+  id          String    @id @default(uuid())
+  leadId      String
+  memoryScope String    // hot, profile, canonical, archive, retracted
+  key         String    // current_objection, product_interest, etc
+  valueJson   String    // SQLite não suporta tipo Json nativo, salvamos como String serializada
+  confidence  Float
+  status      String    // hypothesis, confirmed, weakened, retracted
+  sourceType  String    // llm, rule, manual, import
+  sourceRef   String?
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([memoryScope, key])
+  @@map("memory_items")
+}
+
+model PersonaSnapshot {
+  id                  String   @id @default(uuid())
+  leadId              String
+  version             Int
+  personaJson         String   // SQLite não suporta tipo Json nativo, salvamos como String serializada
+  generatedFromTurnId String?
+  createdAt           DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("persona_snapshots")
+}
+
+model StrategySnapshot {
+  id                  String   @id @default(uuid())
+  leadId              String
+  version             Int
+  stage               String   // estágio atual do funil comercial
+  strategyJson        String   // SQLite não suporta tipo Json nativo, salvamos como String serializada
+  generatedFromTurnId String?
+  createdAt           DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("strategy_snapshots")
+}
+
+model ReplyRecommendation {
+  id        String   @id @default(uuid())
+  leadId    String
+  turnId    String
+  replyText String
+  replyJson String?  // SQLite não suporta tipo Json nativo, salvamos como String serializada
+  modelName String
+  createdAt DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  turn Turn @relation(fields: [turnId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([turnId])
+  @@map("reply_recommendations")
+}
+
+model AuditEvent {
+  id          String   @id @default(uuid())
+  leadId      String
+  eventType   String   // turn_ingested, signal_extracted, etc
+  payloadJson String?  // SQLite não suporta tipo Json nativo, salvamos como String serializada
+  createdAt   DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("audit_events")
+}
