@@ -21,6 +21,8 @@ RUN npm run build
 # Estágio 2: Ambiente de Execução Leve
 FROM node:20-alpine
 
+RUN apk add --no-cache openssl libc6-compat
+
 WORKDIR /app
 
 # Define variáveis de ambiente de produção
