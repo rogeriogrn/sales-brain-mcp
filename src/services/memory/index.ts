@@ -3,9 +3,13 @@ import { AuditRepository } from '../../repositories/postgres/audit.js';
 import { ExtractedSignal } from '../signal-extraction/index.js';
 import { logger } from '../../shared/logger/index.js';
 
+import { CreateAuditEventInput } from '../../repositories/postgres/audit.js';
+
 export const MemoryService = {
   async processSignals(leadId: string, signals: ExtractedSignal[], turnId: string) {
     logger.info({ leadId, signalCount: signals.length }, '🧠 Processando memória estruturada com novos sinais');
+
+    const auditEventsToCreate: CreateAuditEventInput[] = [];
 
     for (const signal of signals) {
       let memoryScope = 'profile';
@@ -96,7 +100,7 @@ export const MemoryService = {
       });
 
       // Gravar auditoria para cada promoção de hipótese
-      await AuditRepository.create({
+      auditEventsToCreate.push({
         leadId,
         eventType: 'memory_promoted',
         payloadJson: {
@@ -107,6 +111,10 @@ export const MemoryService = {
           turnId,
         },
       });
+    }
+
+    if (auditEventsToCreate.length > 0) {
+      await AuditRepository.createMany(auditEventsToCreate);
     }
 
     logger.info({ leadId }, '🧠 Processamento de memória concluído com sucesso');
